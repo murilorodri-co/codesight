@@ -2,6 +2,7 @@ import { useState } from "react";
 import headerLogo from "../assets/img/logo-header.svg";
 import Navbar from "../components/navbar.js";
 import { Icon } from "@iconify/react";
+import { jsPDF } from "jspdf";
 import "../index.css";
 
 export default function Produtos() {
@@ -17,6 +18,7 @@ export default function Produtos() {
   const [materiasSelecionadas, setMateriasSelecionadas] = useState([]);
   const [novoProduto, setNovoProduto] = useState({ nomeProduto: "", unidadeMedida: "" });
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [produtos, setProdutos] = useState(produtosIniciais);
 
   const itensPorPagina = 8;
 
@@ -33,16 +35,14 @@ export default function Produtos() {
     { nome: "Produto 9", ncm: "3031.32.33", preco: "R$ 90,00", unidade: "Caixa", tipo: "Madeira", status: "Pendente", variacao: "Ver variações", adicionado: "12/09/2025" }
   ];
 
-  const [produtos, setProdutos] = useState(produtosIniciais);
-
   // ----- Funções de modal -----
   const openModal = (produto) => {
     setSelectedProduct(produto);
     setIsModalOpen(true);
   };
   const closeModal = () => {
-  setSelectedProduct(null);
-  setIsModalOpen(false);
+    setSelectedProduct(null);
+    setIsModalOpen(false);
   };
 
   const handleInputChange = (e) => {
@@ -146,12 +146,67 @@ export default function Produtos() {
   const openAddModal = () => setIsAddModalOpen(true);
   const closeAddModal = () => setIsAddModalOpen(false);
 
+  const exportXML = () => {
+    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<produtos>\n';
+    produtos.forEach((p) => {
+      xml += `  <produto>\n`;
+      Object.entries(p).forEach(([key, value]) => {
+        xml += `    <${key}>${value}</${key}>\n`;
+      });
+      xml += `  </produto>\n`;
+    });
+    xml += '</produtos>';
+
+    const blob = new Blob([xml], { type: "application/xml" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "produtos.xml";
+    link.click();
+  };
+
+  const exportPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(12);
+    doc.text("Tabela de Produtos", 14, 20);
+
+    let y = 30;
+    produtos.forEach((p, index) => {
+      doc.text(`${index + 1}. ${p.nome} - ${p.ncm} - ${p.preco} - ${p.unidade} - ${p.tipo} - ${p.status} - ${p.adicionado}`, 14, y);
+      y += 10;
+      if (y > 280) {
+        doc.addPage();
+        y = 20;
+      }
+    });
+
+    doc.save("produtos.pdf");
+  };
+
+  const handleExport = () => {
+    const choice = window.prompt("Digite 'xml' para XML ou 'pdf' para PDF:", "xml");
+    if (choice === "xml") exportXML();
+    else if (choice === "pdf") exportPDF();
+    else alert("Formato inválido!");
+  };
+
+  // Estado para o modal de exportação
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+  // Função para abrir
+  const openExportModal = () => {
+    setIsExportModalOpen(true);
+  };
+
+  // Função para fechar
+  const closeExportModal = () => {
+    setIsExportModalOpen(false);
+  };
+
   return (
     <div>
       <div className="header-main">
         <a href="/produtos"><img src={headerLogo} alt="Logo" /></a>
       </div>
-
       <section className="section-stock-main">
         <div className="section-stock-text">
           <h1>Estoque - Produtos</h1>
@@ -179,76 +234,90 @@ export default function Produtos() {
           </div>
 
           <div className="section-actions-buttons">
-
             {/* Filtrar */}
-          <button className="section-actions-filter" onClick={openFilterModal}>
-            <svg viewBox="0 0 512 512" height="16px">
-              <path d="M0 416c0 17.7 14.3 32 32 32l54.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48L480 448c17.7 0 32-14.3 32-32s-14.3-32-32-32l-246.7 0c-12.3-28.3-40.5-48-73.3-48s-61 19.7-73.3 48L32 384c-17.7 0-32 14.3-32 32zm128 0a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zM320 256a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zm32-80c-32.8 0-61 19.7-73.3 48L32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l246.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48l54.7 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-54.7 0c-12.3-28.3-40.5-48-73.3-48zM192 128a32 32 0 1 1 0-64 32 32 0 1 1 0 64zm73.3-64C253 35.7 224.8 16 192 16s-61 19.7-73.3 48L32 64C14.3 64 0 78.3 0 96s14.3 32 32 32l86.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48L480 128c17.7 0 32-14.3 32-32s-14.3-32-32-32L265.3 64z"></path>
-            </svg>
-            <span className="filter-text">Filtrar</span>
-          </button>
+            <button className="section-actions-filter" onClick={openFilterModal}>
+              <svg viewBox="0 0 512 512" height="16px">
+                <path d="M0 416c0 17.7 14.3 32 32 32l54.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48L480 448c17.7 0 32-14.3 32-32s-14.3-32-32-32l-246.7 0c-12.3-28.3-40.5-48-73.3-48s-61 19.7-73.3 48L32 384c-17.7 0-32 14.3-32 32zm128 0a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zM320 256a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zm32-80c-32.8 0-61 19.7-73.3 48L32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l246.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48l54.7 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-54.7 0c-12.3-28.3-40.5-48-73.3-48zM192 128a32 32 0 1 1 0-64 32 32 0 1 1 0 64zm73.3-64C253 35.7 224.8 16 192 16s-61 19.7-73.3 48L32 64C14.3 64 0 78.3 0 96s14.3 32 32 32l86.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48L480 128c17.7 0 32-14.3 32-32s-14.3-32-32-32L265.3 64z"></path>
+              </svg>
+              <span className="filter-text">Filtrar</span>
+            </button>
 
-          {isFilterModalOpen && (
-            <div className="filter-modal-overlay" onClick={closeFilterModal}>
-              <div className="filter-modal-content" onClick={(e) => e.stopPropagation()}>
-                <h2>Filtros</h2>
-                <form>
-                  <div className="filter-field">
-                    <label>Status</label>
-                    <select
-                      name="status"
-                      value={filtros.status}  // <-- controla o select pelo estado
-                      onChange={(e) => aplicarFiltro("status", e.target.value)}
-                    >
-                      <option value="">Todos</option>
-                      <option value="Em estoque">Em estoque</option>
-                      <option value="Fora de estoque">Fora de estoque</option>
-                      <option value="Pendente">Pendente</option>
-                    </select>
-                  </div>
+            {isFilterModalOpen && (
+              <div className="filter-modal-overlay" onClick={closeFilterModal}>
+                <div className="filter-modal-content" onClick={(e) => e.stopPropagation()}>
+                  <h2>Filtros</h2>
+                  <form>
+                    <div className="filter-field">
+                      <label>Status</label>
+                      <select
+                        name="status"
+                        value={filtros.status}  // <-- controla o select pelo estado
+                        onChange={(e) => aplicarFiltro("status", e.target.value)}
+                      >
+                        <option value="">Todos</option>
+                        <option value="Em estoque">Em estoque</option>
+                        <option value="Fora de estoque">Fora de estoque</option>
+                        <option value="Pendente">Pendente</option>
+                      </select>
+                    </div>
 
-                  <div className="filter-field">
-                    <label>Tipo</label>
-                    <select
-                      name="tipo"
-                      value={filtros.tipo} // <-- controla o select pelo estado
-                      onChange={(e) => aplicarFiltro("tipo", e.target.value)}
-                    >
-                      <option value="">Todos</option>
-                      <option value="Bobina">Bobina</option>
-                      <option value="Plástico">Plástico</option>
-                      <option value="Vidro">Vidro</option>
-                      <option value="Papel">Papel</option>
-                      <option value="Químico">Químico</option>
-                      <option value="Metal">Metal</option>
-                      <option value="Tecido">Tecido</option>
-                      <option value="Aço Inoxidável">Aço Inoxidável</option>
-                      <option value="Borracha">Borracha</option>
-                    </select>
-                  </div>
+                    <div className="filter-field">
+                      <label>Tipo</label>
+                      <select
+                        name="tipo"
+                        value={filtros.tipo} // <-- controla o select pelo estado
+                        onChange={(e) => aplicarFiltro("tipo", e.target.value)}
+                      >
+                        <option value="">Todos</option>
+                        <option value="Bobina">Bobina</option>
+                        <option value="Plástico">Plástico</option>
+                        <option value="Vidro">Vidro</option>
+                        <option value="Papel">Papel</option>
+                        <option value="Químico">Químico</option>
+                        <option value="Metal">Metal</option>
+                        <option value="Tecido">Tecido</option>
+                        <option value="Aço Inoxidável">Aço Inoxidável</option>
+                        <option value="Borracha">Borracha</option>
+                      </select>
+                    </div>
 
-                <div className="stock-modal-actions">
-                  <button
-                    className="stock-modal-cancel"
-                    type="button"
-                    onClick={closeModal}
-                  >
-                    Cancelar
-                  </button>
-                  <button className="stock-modal-save" type="submit">
-                    Salvar
-                  </button>
+                    <div className="stock-modal-actions">
+                      <button type="button" className="stock-modal-cancel" onClick={closeFilterModal}>
+                        Cancelar
+                      </button>
+                      <button type="button" className="stock-modal-save" onClick={closeFilterModal}>
+                        Aplicar
+                      </button>
+                    </div>
+                  </form>
                 </div>
-                </form>
               </div>
-            </div>
-          )}
+            )}
 
             {/* Exportar */}
-            <button className="section-actions-export">
+            <button className="section-actions-export" onClick={openExportModal}>
               <Icon icon="solar:export-bold" height="25" />
               <span className="export-text">Exportar</span>
             </button>
+
+            {isExportModalOpen && (
+              <div className="export-modal-overlay">
+                <div className="export-modal-content">
+                  <button 
+                    className="export-modal-close" 
+                    type="button" 
+                    onClick={() => setIsExportModalOpen(false)}
+                  >
+                    <Icon icon="mdi:close" height="24" />
+                  </button>
+                  <h2>Escolha o formato de exportação</h2>
+                  <div className="export-modal-buttons">
+                    <button onClick={() => exportPDF()}>PDF</button>
+                    <button onClick={() => exportXML()}>XML</button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Adicionar matéria-prima */}
             <button
@@ -416,6 +485,7 @@ export default function Produtos() {
 
                 const coluna = colunas.find(c => c.chave === campo);
 
+                // Campo de status
                 if (campo === "status") {
                   return (
                     <div key={campo} className="stock-modal-field">

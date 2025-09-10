@@ -2,17 +2,28 @@ import { useState } from "react";
 import headerLogo from "../assets/img/logo-header.svg";
 import Navbar from "../components/navbar.js";
 import { Icon } from "@iconify/react";
-import loadIcon from "../assets/img/load-xml.svg"
+import loadIcon from "../assets/img/load-xml.svg";
+import { jsPDF } from "jspdf";
 import "../index.css";
 
 export default function MateriasPrimas() {
+  // ---------------- ESTADOS ----------------
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedMaterial, setSelectedMaterial] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [paginaAtual, setPaginaAtual] = useState(1);
+  const [searchTerm, setSearchTerm] = useState("");
   const itensPorPagina = 8;
+  const [filtros, setFiltros] = useState({ status: "", tipo: "" });
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [materiasSelecionadas, setMateriasSelecionadas] = useState([]);
+  const [isVariacaoModalOpen, setIsVariacaoModalOpen] = useState(false);
+  const [variacoesSelecionadas, setVariacoesSelecionadas] = useState([]);
+  const [isEditVariacaoModalOpen, setIsEditVariacaoModalOpen] = useState(false);
+  const [arquivosCarregados, setArquivosCarregados] = useState([]);
 
+  // ---------------- LISTA INICIAL ----------------
   const materiaisIniciais = [
     { nome: "Matéria-prima 1", ncm: "8471.30.12", preco: "R$ 50,00", unidade: "Litros", tipo: "Bobina", variacao: "Ver variações", possuiNF: "Sim", adicionado: "04/09/2025" },
     { nome: "Matéria-prima 2", ncm: "1234.56.78", preco: "R$ 75,00", unidade: "Kg", tipo: "Plástico", variacao: "Ver variações", possuiNF: "Não", adicionado: "05/09/2025" },
@@ -27,6 +38,41 @@ export default function MateriasPrimas() {
 
   const [materiais, setMateriais] = useState(materiaisIniciais);
 
+  // ---------------- FUNÇÕES DE PESQUISA ----------------
+  const materiaisFiltrados = materiais
+  .filter((materia) =>
+    materia.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    materia.ncm.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    materia.preco.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    materia.unidade.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    materia.tipo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    materia.variacao.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    materia.possuiNF.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    materia.adicionado.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+  .filter((materia) =>
+    filtros.tipo ? materia.tipo === filtros.tipo : true
+  )
+  .filter((materia) =>
+    filtros.possuiNF ? materia.possuiNF === filtros.possuiNF : true
+  );
+
+  const indiceInicial = (paginaAtual - 1) * itensPorPagina;
+  const indiceFinal = indiceInicial + itensPorPagina;
+  const materiaisPagina = materiaisFiltrados.slice(indiceInicial, indiceFinal);
+  const totalPaginas = Math.ceil(materiaisFiltrados.length / itensPorPagina);
+
+  // ----- Funções de modal de filtro -----
+  const openFilterModal = () => setIsFilterModalOpen(true);
+  const closeFilterModal = () => setIsFilterModalOpen(false);
+
+  // ----- Função de aplicar filtros -----
+  const aplicarFiltro = (campo, valor) => {
+    setFiltros(prev => ({ ...prev, [campo]: valor }));
+    setPaginaAtual(1); // volta pra primeira página ao filtrar
+  };
+
+  // ---------------- FUNÇÕES MODAIS ----------------
   const openModal = (materiaPrima) => {
     setSelectedMaterial(materiaPrima);
     setIsModalOpen(true);
@@ -37,15 +83,60 @@ export default function MateriasPrimas() {
     setIsModalOpen(false);
   };
 
+  const abrirModalVariacao = (materiaNome) => {
+    setVariacoesSelecionadas(variacoesPorMateria[materiaNome] || []);
+    setIsVariacaoModalOpen(true);
+  };
+
+  const fecharModalVariacao = () => {
+    setIsVariacaoModalOpen(false);
+    setVariacoesSelecionadas([]);
+  };
+
+  const abrirModalEditarVariacao = () => {
+    setIsEditVariacaoModalOpen(true);
+  };
+
+  const fecharModalEditarVariacao = () => {
+    setIsEditVariacaoModalOpen(false);
+  };
+
+  // ---------------- FUNÇÕES AUXILIARES ----------------
   const handleInputChange = (e) => {
     setSelectedMaterial({ ...selectedMaterial, [e.target.name]: e.target.value });
   };
 
+  const toggleMateria = (materia) => {
+    if (materiasSelecionadas.includes(materia)) {
+      setMateriasSelecionadas(materiasSelecionadas.filter(m => m !== materia));
+    } else {
+      setMateriasSelecionadas([...materiasSelecionadas, materia]);
+    }
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const novoArquivo = { nome: file.name, progresso: 0 };
+      setArquivosCarregados(prev => [...prev, novoArquivo]);
+
+      const interval = setInterval(() => {
+        setArquivosCarregados(prev => prev.map(f => {
+          if (f.nome === file.name && f.progresso < 100) {
+            return { ...f, progresso: f.progresso + 10 };
+          }
+          return f;
+        }));
+      }, 300);
+
+      setTimeout(() => clearInterval(interval), 3100);
+    }
+  };
+
+  // ---------------- ORDENAR ----------------
   const ordenar = (key) => {
     let direction = "asc";
-    if (sortConfig.key === key && sortConfig.direction === "asc") {
-      direction = "desc";
-    }
+    if (sortConfig.key === key && sortConfig.direction === "asc") direction = "desc";
 
     const materiaisOrdenados = [...materiais].sort((a, b) => {
       if (key === "preco") {
@@ -67,6 +158,7 @@ export default function MateriasPrimas() {
     setSortConfig({ key, direction });
   };
 
+  // ---------------- COLUNAS ----------------
   const colunas = [
     { chave: "nome", titulo: "Nome da matéria-prima" },
     { chave: "ncm", titulo: "NCM" },
@@ -76,87 +168,73 @@ export default function MateriasPrimas() {
     { chave: "variacao", titulo: "Variação" },
     { chave: "possuiNF", titulo: "Possui NF?" },
     { chave: "adicionado", titulo: "Adicionado" }
-  ];  
+  ];
 
-  // Paginação
-  const indiceInicial = (paginaAtual - 1) * itensPorPagina;
-  const indiceFinal = indiceInicial + itensPorPagina;
-  const materiaisPagina = materiais.slice(indiceInicial, indiceFinal);
-  const totalPaginas = Math.ceil(materiais.length / itensPorPagina);
-
-  const [materiasSelecionadas, setMateriasSelecionadas] = useState([]);
-
-  const toggleMateria = (materia) => {
-    if (materiasSelecionadas.includes(materia)) {
-      setMateriasSelecionadas(materiasSelecionadas.filter(m => m !== materia));
-    } else {
-      setMateriasSelecionadas([...materiasSelecionadas, materia]);
-    }
-  };
-
-  const [isVariacaoModalOpen, setIsVariacaoModalOpen] = useState(false);
-  const [variacoesSelecionadas, setVariacoesSelecionadas] = useState([]);
-
+  // ---------------- VARIAÇÕES ----------------
   const variacoesPorMateria = {
     "Matéria-prima 1": ["Matéria-prima 1 - Azul", "Matéria-prima 1 - Verde", "Matéria-prima 1 - Vermelho"],
     "Matéria-prima 2": ["Matéria-prima 2 - Pequena", "Matéria-prima 2 - Média", "Matéria-prima 2 - Grande"],
   };
 
   const precosVariacoes = {
-  "Matéria-prima 1 - Azul": "R$ 12,50",
-  "Matéria-prima 1 - Verde": "R$ 13,00",
-  "Matéria-prima 1 - Vermelho": "R$ 14,20",
-  "Matéria-prima 2 - Pequena": "R$ 8,00",
-  "Matéria-prima 2 - Média": "R$ 10,00",
-  "Matéria-prima 2 - Grande": "R$ 12,00",
-};
-
-  const abrirModalVariacao = (materiaNome) => {
-    setVariacoesSelecionadas(variacoesPorMateria[materiaNome] || []);
-    setIsVariacaoModalOpen(true);
+    "Matéria-prima 1 - Azul": "R$ 12,50",
+    "Matéria-prima 1 - Verde": "R$ 13,00",
+    "Matéria-prima 1 - Vermelho": "R$ 14,20",
+    "Matéria-prima 2 - Pequena": "R$ 8,00",
+    "Matéria-prima 2 - Média": "R$ 10,00",
+    "Matéria-prima 2 - Grande": "R$ 12,00",
   };
 
-  const fecharModalVariacao = () => {
-    setIsVariacaoModalOpen(false);
-    setVariacoesSelecionadas([]);
+  // Estado para o modal de exportação
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+  // Abrir/fechar modal
+  const openExportModal = () => setIsExportModalOpen(true);
+  const closeExportModal = () => setIsExportModalOpen(false);
+
+  // Exportar XML
+  const exportXML = () => {
+    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<materias>\n';
+    materiaisFiltrados.forEach((m) => {
+      xml += `  <materia>\n`;
+      Object.entries(m).forEach(([key, value]) => {
+        xml += `    <${key}>${value}</${key}>\n`;
+      });
+      xml += `  </materia>\n`;
+    });
+    xml += '</materias>';
+
+    const blob = new Blob([xml], { type: "application/xml" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "materias.xml";
+    link.click();
+    closeExportModal();
   };
 
-  // States adicionais dentro do componente
-  const [isEditVariacaoModalOpen, setIsEditVariacaoModalOpen] = useState(false);
+  // Exportar PDF
+  const exportPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(12);
+    doc.text("Tabela de Matérias-Primas", 14, 20);
 
-  // Abre o modal de edição da variação
-  const abrirModalEditarVariacao = () => {
-    setIsEditVariacaoModalOpen(true);
+    let y = 30;
+    materiaisFiltrados.forEach((m, index) => {
+      doc.text(
+        `${index + 1}. ${m.nome} - ${m.ncm} - ${m.preco} - ${m.unidade} - ${m.tipo} - ${m.variacao} - ${m.possuiNF} - ${m.adicionado}`,
+        14,
+        y
+      );
+      y += 10;
+      if (y > 280) {
+        doc.addPage();
+        y = 20;
+      }
+    });
+
+    doc.save("materias.pdf");
+    closeExportModal();
   };
-  
-  // Fecha o modal
-  const fecharModalEditarVariacao = () => {
-    setIsEditVariacaoModalOpen(false);
-  };
-
-  const [arquivosCarregados, setArquivosCarregados] = useState([]);
-
-  const handleFileChange = (e) => {
-  const file = e.target.files[0];
-  if (file) {
-    // Cria um objeto de arquivo com progresso inicial
-    const novoArquivo = { nome: file.name, progresso: 0 };
-    setArquivosCarregados(prev => [...prev, novoArquivo]);
-
-    // Simula upload (você pode substituir pela lógica real de upload)
-    const interval = setInterval(() => {
-      setArquivosCarregados(prev => prev.map(f => {
-        if (f.nome === file.name && f.progresso < 100) {
-          return { ...f, progresso: f.progresso + 10 };
-        }
-        return f;
-      }));
-    }, 300);
-
-    // Para o intervalo quando chegar em 100%
-    setTimeout(() => clearInterval(interval), 3100);
-  }
-};
 
   return (
     <div>
@@ -172,23 +250,108 @@ export default function MateriasPrimas() {
 
         {/* Ações */}
         <div className="section-stock-actions">
+
           <div className="section-actions-search">
             <svg className="section-search-icon" aria-hidden="true" viewBox="0 0 24 24">
               <g><path d="M21.53 20.47l-3.66-3.66C19.195 15.24 20 13.214 20 11c0-4.97-4.03-9-9-9s-9 4.03-9 9 4.03 9 9 9c2.215 0 4.24-.804 5.808-2.13l3.66 3.66c.147.146.34.22.53.22s.385-.073.53-.22c.295-.293.295-.767.002-1.06zM3.5 11c0-4.135 3.365-7.5 7.5-7.5s7.5 3.365 7.5 7.5-3.365 7.5-7.5 7.5-7.5-3.365-7.5-7.5z"></path></g>
             </svg>
-            <input placeholder="Pesquisar" type="search" className="section-search-input" />
+            <input
+              placeholder="Pesquisar"
+              type="search"
+              className="section-search-input"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPaginaAtual(1); // reset da paginação ao pesquisar
+              }}
+            />
           </div>
 
-          {/* Filtrar */}
           <div className="section-actions-buttons">
-            <button className="section-actions-filter"> <svg viewBox="0 0 512 512" height="16px"> <path d="M0 416c0 17.7 14.3 32 32 32l54.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48L480 448c17.7 0 32-14.3 32-32s-14.3-32-32-32l-246.7 0c-12.3-28.3-40.5-48-73.3-48s-61 19.7-73.3 48L32 384c-17.7 0-32 14.3-32 32zm128 0a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zM320 256a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zm32-80c-32.8 0-61 19.7-73.3 48L32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l246.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48l54.7 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-54.7 0c-12.3-28.3-40.5-48-73.3-48zM192 128a32 32 0 1 1 0-64 32 32 0 1 1 0 64zm73.3-64C253 35.7 224.8 16 192 16s-61 19.7-73.3 48L32 64C14.3 64 0 78.3 0 96s14.3 32 32 32l86.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48L480 128c17.7 0 32-14.3 32-32s-14.3-32-32-32L265.3 64z"></path> </svg> <span className="filter-text">Filtrar</span>
+
+            {/* Filtrar */}
+            <button className="section-actions-filter" onClick={openFilterModal}>
+              <svg viewBox="0 0 512 512" height="16px">
+                <path d="M0 416c0 17.7 14.3 32 32 32l54.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48L480 448c17.7 0 32-14.3 32-32s-14.3-32-32-32l-246.7 0c-12.3-28.3-40.5-48-73.3-48s-61 19.7-73.3 48L32 384c-17.7 0-32 14.3-32 32zm128 0a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zM320 256a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zm32-80c-32.8 0-61 19.7-73.3 48L32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l246.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48l54.7 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-54.7 0c-12.3-28.3-40.5-48-73.3-48zM192 128a32 32 0 1 1 0-64 32 32 0 1 1 0 64zm73.3-64C253 35.7 224.8 16 192 16s-61 19.7-73.3 48L32 64C14.3 64 0 78.3 0 96s14.3 32 32 32l86.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48L480 128c17.7 0 32-14.3 32-32s-14.3-32-32-32L265.3 64z"></path>
+              </svg>
+              <span className="filter-text">Filtrar</span>
             </button>
 
+            {isFilterModalOpen && (
+              <div className="filter-modal-overlay" onClick={closeFilterModal}>
+                <div className="filter-modal-content" onClick={(e) => e.stopPropagation()}>
+                  <h2>Filtros</h2>
+                  <form>
+                    <div className="filter-field">
+                      <label>Possui NF?</label>
+                      <select
+                        name="possuiNF"
+                        value={filtros.possuiNF}
+                        onChange={(e) => aplicarFiltro("possuiNF", e.target.value)}
+                      >
+                        <option value="">Todos</option>
+                        <option value="Sim">Sim</option>
+                        <option value="Não">Não</option>
+                      </select>
+                    </div>
+
+                    <div className="filter-field">
+                      <label>Tipo</label>
+                      <select
+                        name="tipo"
+                        value={filtros.tipo} // <-- controla o select pelo estado
+                        onChange={(e) => aplicarFiltro("tipo", e.target.value)}
+                      >
+                        <option value="">Todos</option>
+                        <option value="Bobina">Bobina</option>
+                        <option value="Plástico">Plástico</option>
+                        <option value="Vidro">Vidro</option>
+                        <option value="Papel">Papel</option>
+                        <option value="Químico">Químico</option>
+                        <option value="Metal">Metal</option>
+                        <option value="Tecido">Tecido</option>
+                        <option value="Aço Inoxidável">Aço Inoxidável</option>
+                        <option value="Borracha">Borracha</option>
+                      </select>
+                    </div>
+
+                    <div className="stock-modal-actions">
+                      <button type="button" className="stock-modal-cancel" onClick={closeFilterModal}>
+                        Cancelar
+                      </button>
+                      <button type="button" className="stock-modal-save" onClick={closeFilterModal}>
+                        Aplicar
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
             {/* Exportar */}
-            <button className="section-actions-export">
+            <button className="section-actions-export" onClick={openExportModal}>
               <Icon icon="solar:export-bold" height="25" />
               <span className="export-text">Exportar</span>
             </button>
+
+            {isExportModalOpen && (
+              <div className="export-modal-overlay">
+                <div className="export-modal-content">
+                  <button 
+                    className="export-modal-close" 
+                    type="button" 
+                    onClick={() => setIsExportModalOpen(false)}
+                  >
+                    <Icon icon="mdi:close" height="24" />
+                  </button>
+                  <h2>Escolha o formato de exportação</h2>
+                  <div className="export-modal-buttons">
+                    <button onClick={() => exportPDF()}>PDF</button>
+                    <button onClick={() => exportXML()}>XML</button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Adicionar nota fiscal */}
             <button
@@ -308,7 +471,12 @@ export default function MateriasPrimas() {
                         {materiaPrima.possuiNF}
                     </span>
                     </td>
-                    <td>{materiaPrima.adicionado}</td>
+                    <td className="stock-adicionado-td">
+                      {materiaPrima.adicionado}
+                      <span className="stock-tooltip">
+                        Editado por último em: {materiaPrima.ultimaEdicao || materiaPrima.adicionado}
+                      </span>
+                    </td>
                     <td>
                     <Icon 
                         icon="uiw:setting" 
